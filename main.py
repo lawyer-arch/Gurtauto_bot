@@ -18,10 +18,10 @@ async def main():
 
         dp = Dispatcher()  # v3: не передаём bot
 
-        # USER ROUTERS 
+        # USER ROUTERS
+        dp.include_router(lead_form.router)
         dp.include_router(start.router)
         dp.include_router(menu.router)
-        dp.include_router(lead_form.router)
         
         # ADMIN ROUTERS
         # dp.include_router(admin_menu.router)

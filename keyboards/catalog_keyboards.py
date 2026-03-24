@@ -13,16 +13,10 @@ def button_generator_application():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="📝 Заполнить произвольно",
+                    text="📝 Заполнить форму",
                     callback_data="free_form"
                 )
             ],
-            [
-                InlineKeyboardButton(
-                    text="🖊️ Форма",
-                    callback_data="structured_form"
-                )
-            ]
         ]
     ) 
     
