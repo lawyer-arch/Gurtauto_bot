@@ -4,5 +4,9 @@ start:
 initdb:
 	python init_db.py
 
-importdb:
-	python import_cars.py
+migrate:
+	alembic init migrations
+
+init:
+	alembic revision --autogenerate -m "init"
+	alembic upgrade head

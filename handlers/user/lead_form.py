@@ -1,7 +1,7 @@
 import re
 import logging
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ContentType, PhotoSize
 from aiogram.fsm.context import FSMContext
 
 from states.states import ApplicationFormStates
@@ -10,6 +10,12 @@ from database.repository.user_repo import UserRepository
 from database.repository.lead_repo import LeadRepository
 from services.lead_service import LeadService
 from services.notify_service import NotifyService
+from keyboards.catalog_keyboards import (
+    button_generator_drive,
+    button_generator_fuel,
+    button_generator_year,
+    button_generator_repairs    
+)
 
 router = Router()
 
@@ -20,41 +26,195 @@ def extract_image_url(text: str):
     return match.group(1) if match else None
 
 
+""" Выбираем марку, модель, цвет кузова"""
 @router.callback_query(F.data == "free_form")
 async def start_free_form(callback: CallbackQuery, state: FSMContext):
-    massage = (
-        "<b>Опишите авто как можно подробнее.</b>\n"
-        "Укажите: Марку, модель, цвет,"
-        "объем двигетеля, привод, трансмиссия,"
-        "топливо, пробег желаемый, год выпуска. "
-        "Желаемый бюджет."
+    get_message = (
+        "Укажите марку, модель, цвет кузова желаемого автомобиля.\n"
+        "Обязательно в указанном порядке."
     )
-    await callback.message.answer(massage)
-    await state.set_state(ApplicationFormStates.WAITING_FOR_DESCRIPTION)
+    
+    await callback.message.answer(get_message)
+    await state.set_state(ApplicationFormStates.marka_model)
     await callback.answer()
 
 
-@router.message(ApplicationFormStates.WAITING_FOR_DESCRIPTION)
-async def desc_url(message: Message, state: FSMContext):
-    if not message.text:
-        await message.answer("❗ Пожалуйста, отправьте текст")
+"""Выбираем объем двигателя"""
+@router.message(ApplicationFormStates.marka_model)
+async def handler_marka_model(message: Message, state: FSMContext):
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer("❗ Укажите минимум: марка и модель (например: BMW X5)")
         return
-    await state.update_data(car_description=message.text)
-    await message.answer("По желанию прикрепите по выбору фото, ссылку на Авито, Дром.")
-    await state.set_state(ApplicationFormStates.WAITING_FOR_URL_PICTURE)
+    
+    marka = parts[0] if len(parts) > 0 else None
+    model = parts[1] if len(parts) > 1 else None
+    color = " ".join(parts[2:]) if len(parts) > 2 else None
+    get_message = (
+        "Укажите объем двигателя."
+    )
+    await state.update_data(
+        marka=marka,
+        model=model,
+        color=color
+    )
+    await state.set_state(ApplicationFormStates.engine)
+    await message.answer(get_message)
+    
+    
+"""Выбираем тип привода"""
+@router.message(ApplicationFormStates.engine)
+async def select_drive_type(message: Message, state: FSMContext):
+    """
+    Обработчик выбора типа двигателя.
+    Сохраняет выбранный тип двигателя и предлагает выбрать тип привода.
+    """
+    
+    # Сохраняем выбранный тип двигателя в FSMContext
+    await state.update_data(engine=message.text)
+    
+    # Переходим к следующему шагу FSM
+    await state.set_state(ApplicationFormStates.drive)
+    
+    # Предложение пользователю выбрать тип привода
+    prompt = "Укажите тип привода."
+    
+    # Отправляем сообщение с клавиатурой выбора привода
+    await message.answer(
+        text=prompt,
+        reply_markup=button_generator_drive()
+    )
 
 
-@router.message(ApplicationFormStates. WAITING_FOR_URL_PICTURE)
-async def desc(message: Message, state: FSMContext):
-    if not message.text:
-        await message.answer("❗ Пожалуйста, отправьте текст")
-        return
-    await state.update_data(car_description=message.text)
-    await message.answer("Введите телефон:")
-    await state.set_state(ApplicationFormStates.WAITING_FOR_CONTACTS)
+"""Выбираем тип топлива"""
+@router.callback_query(
+    F.data.startswith("drive_"),
+    ApplicationFormStates.drive
+)
+async def select_fuel_type(callback: CallbackQuery, state: FSMContext):
+    """
+    Обработчик выбора типа привода.
+    Сохраняет выбранный тип привода и предлагает выбрать тип топлива.
+    """
+    
+    # Получаем выбранный тип привода из callback_data
+    selected_drive = callback.data.split("_")[1]
+    
+    # Сохраняем выбранный тип привода в FSMContext
+    await state.update_data(drive=selected_drive)
+    
+    # Переходим к следующему шагу FSM
+    await state.set_state(ApplicationFormStates.fuel)
+    
+    # Предложение пользователю выбрать тип топлива
+    prompt = "Выберите тип топлива"
+    
+    # Отправляем сообщение с клавиатурой выбора топлива
+    await callback.message.answer(
+        text=prompt,
+        reply_markup=button_generator_fuel()
+    )
+    await callback.answer()
 
 
-@router.message(ApplicationFormStates.WAITING_FOR_CONTACTS)
+"""Выбираем пробег"""
+@router.callback_query(
+    F.data.startswith("fuel_"),
+    ApplicationFormStates.fuel
+)
+async def handler_mileage(callback: CallbackQuery, state: FSMContext):
+    # Получаем выбранное значение топлива из callback_data
+    selected_fuel = callback.data.split("_")[1]
+    get_message = "Укажите желаемый пробег"
+    # Запоминаем выбранное значение в состоянии
+    await state.update_data(fuel=selected_fuel)
+    # Переводим машину состояний дальше
+    await state.set_state(ApplicationFormStates.mileage)
+    await callback.message.answer(get_message)
+    await callback.answer()
+    
+    
+"""Выбераем возраст авто"""
+@router.message(ApplicationFormStates.mileage)
+async def handler_year(message: Message, state: FSMContext):
+    get_message = "Выберите желаемый диапазон возраста автомобиля"
+    await state.update_data(mileage=message.text)
+    await state.set_state(ApplicationFormStates.year)
+    await message.answer(
+        text=get_message,
+        reply_markup=button_generator_year()
+    )
+    
+
+"""Выбираем бюджет"""
+@router.callback_query(
+    F.data.startswith("year_"),
+    ApplicationFormStates.year
+)
+async def handler_budget(callback: CallbackQuery, state: FSMContext):
+    # Получаем выбранное значение топлива из callback_data
+    selected_year = callback.data.split("_")[1]
+    get_message = "Укажите желаемый бюджет"
+    # Запоминаем выбранное значение в состоянии
+    await state.update_data(year=selected_year)
+    # Переводим машину состояний дальше
+    await state.set_state(ApplicationFormStates.budget)
+    await callback.message.answer(get_message)
+    await callback.answer()
+    
+
+"""Выбираем допустимы или нет повреждения"""
+@router.message(ApplicationFormStates.budget)
+async def handler_repairs(message: Message, state: FSMContext):
+    selected_budget = message.text
+    get_message = "Выбирите допустимость повреждений"
+    await state.update_data(budget=selected_budget)
+    await state.set_state(ApplicationFormStates.repairs)
+    await message.answer(
+            text=get_message,
+            reply_markup=button_generator_repairs()
+        )
+
+
+"""Предлагаем оставить ссылку на сайт или фото"""
+@router.callback_query(
+    F.data.startswith("repairs_"),
+    ApplicationFormStates.repairs
+)
+async def handler_url(callback: CallbackQuery, state: FSMContext):
+    # Получаем выбранное значение топлива из callback_data
+    selected_repairs = callback.data.split("_")[1]
+    get_message = (
+        "По желанию оставьте ссылку на выбранный автомобиль Авито, Дром и т.д\n"
+        "либо фото или любое изоброжение авто."
+    )
+    # Запоминаем выбранное значение в состоянии
+    await state.update_data(repairs=selected_repairs)
+    # Переводим машину состояний дальше
+    await state.set_state(ApplicationFormStates.url_or_image)
+    await callback.message.answer(get_message)
+    await callback.answer()
+    
+
+"""Предлагаем оставить телефон"""
+@router.message(ApplicationFormStates.url_or_image, 
+              F.content_type.in_({ContentType.TEXT, ContentType.PHOTO}))
+async def hanler_url_or_image(message: Message, state: FSMContext):
+    if message.content_type == ContentType.TEXT:
+        await state.update_data(url=message.text)
+
+    elif message.content_type == ContentType.PHOTO:
+        photo: PhotoSize = max(message.photo, key=lambda x: x.width * x.height)
+        photo_file = await message.bot.get_file(photo.file_id)
+        photo_bytes = await message.bot.download_file(photo_file.file_path)
+
+        await state.update_data(image_data=photo_bytes.getvalue())
+
+    await message.answer("Оставьте контактный номер телефона")
+    await state.set_state(ApplicationFormStates.phone)
+    
+
+@router.message(ApplicationFormStates.phone)
 async def phone_handler(message: Message, state: FSMContext):
 
     if not message.text:
@@ -66,19 +226,33 @@ async def phone_handler(message: Message, state: FSMContext):
     phone = "+" + phone
 
     # Валидация
-    if not re.match(r"^\+\d{10,15}$", phone):
+    if not re.match(r"^(\+?\d{1,4})?\d{6,15}$", phone):
         await message.answer("❗ Некорректный телефон. Введите ещё раз (пример: +79991234567)")
         return
 
     data = await state.get_data()
 
     # ВАЖНАЯ ПРОВЕРКА FSM
-    car_description = data.get("car_description")
+    car_description = []
+    field_mapping = {
+        "marka": "Марка",
+        "model": "Модель",
+        "color": "Цвет",
+        "engine": "Двигатель",
+        "drive": "Привод",
+        "fuel": "Топливо",
+        "mileage": "Пробег",
+        "year": "Год",
+        "budget": "Бюджет",
+        "repairs": "Ремонт",
+        "url": "URL"
+    }
 
-    if not car_description:
-        await message.answer("❗ Ошибка. Начните заново.")
-        await state.clear()
-        return
+    for field_key, field_name in field_mapping.items():
+        value = data.get(field_key, "не указано")
+        car_description.append(f"{field_name}: {value}")
+
+    car_description = "\n".join(car_description)
 
     async with async_session() as session:
 
@@ -95,12 +269,22 @@ async def phone_handler(message: Message, state: FSMContext):
         try:
             await service.create_lead({
                 "user_id": user.id,
-                "car_description": car_description,
                 "phone": phone,
-                "car_id": None
+                "marka": data.get["marka"],
+                "model": data.get["model"],
+                "color": data.get("color"),
+                "engine": data.get["engine"],
+                "drive": data.get["drive"],
+                "fuel": data.get["fuel"],
+                "mileage": data.get["mileage"],
+                "year": data.get["year"],
+                "budget": data.get["budget"],
+                "repairs": data.get["repairs"],
+                "url": data.get("url"),
+                "image_data": data.get("image_data")
             })
         except Exception as e:
-            logging.error(f"DB error: {e}")
+            logging.error(f"DB error: {e}", exc_info=True)
             await message.answer("❗ Ошибка сохранения заявки. Попробуйте позже.")
             return 
 

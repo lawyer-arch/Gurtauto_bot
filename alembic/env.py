@@ -5,7 +5,6 @@ from alembic import context
 
 from database.base import Base
 from database.models.user import User
-from database.models.car import Car
 from database.models.lead import Lead
 from config import settings
 
