@@ -164,3 +164,21 @@ def button_generator_repairs():
     ) 
     
     return buttons
+
+
+def button_generator_further():
+    
+    """Генерирует кнопки далее"""
+    
+    buttons = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Пропустить",
+                    callback_data="further"
+                )
+            ]
+        ]
+    ) 
+    
+    return buttons

@@ -12,7 +12,7 @@ router = Router()
 async def leave_application(message: Message):
     # Отправляем сообщение с клавиатурой 
     await message.answer(
-        "<b>🖊️ Ответте на несколько вопросов</b>\n"
+        "<b>🖊️ Ответьте на несколько вопросов</b>\n"
         "<b>и по желанию можете приложить фото,</b>\n"
         "<b>ссылку на Авито или Дром.</b>",
         reply_markup=button_generator_application()

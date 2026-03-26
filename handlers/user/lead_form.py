@@ -14,7 +14,8 @@ from keyboards.catalog_keyboards import (
     button_generator_drive,
     button_generator_fuel,
     button_generator_year,
-    button_generator_repairs    
+    button_generator_repairs,
+    button_generator_further
 )
 
 router = Router()
@@ -185,35 +186,64 @@ async def handler_url(callback: CallbackQuery, state: FSMContext):
     # Получаем выбранное значение топлива из callback_data
     selected_repairs = callback.data.split("_")[1]
     get_message = (
-        "По желанию оставьте ссылку на выбранный автомобиль Авито, Дром и т.д\n"
-        "либо фото или любое изоброжение авто."
+        "По желанию оставьте ссылку на выбранный автомобиль Авито, Дром и т.д.\n"
+        "либо фото или любое изображение авто.\n\n"
+        "Или нажмите «Пропустить», если не хотите прикреплять."
     )
     # Запоминаем выбранное значение в состоянии
     await state.update_data(repairs=selected_repairs)
     # Переводим машину состояний дальше
     await state.set_state(ApplicationFormStates.url_or_image)
-    await callback.message.answer(get_message)
+    await callback.message.answer(
+        get_message,
+        reply_markup=button_generator_further()
+    )
     await callback.answer()
     
 
+"""Ловит кнопку далее"""
+@router.callback_query(F.data == "further", ApplicationFormStates.url_or_image)
+async def skip_url_or_image(callback: CallbackQuery, state: FSMContext):
+    # Сохраняем None для обоих полей — пользователь ничего не прикрепил
+    await state.update_data(url=None, image_data=None)
+    await state.set_state(ApplicationFormStates.phone)
+    await callback.answer()
+
+
 """Предлагаем оставить телефон"""
-@router.message(ApplicationFormStates.url_or_image, 
+@router.message(ApplicationFormStates.url_or_image,
               F.content_type.in_({ContentType.TEXT, ContentType.PHOTO}))
 async def hanler_url_or_image(message: Message, state: FSMContext):
-    if message.content_type == ContentType.TEXT:
-        await state.update_data(url=message.text)
+    try:
+        if message.content_type == ContentType.TEXT:
+            text = message.text.strip()
+            # Проверяем, является ли текст ссылкой
+            if re.match(r'https?://\S+', text):
+                await state.update_data(url=text, image_data=None)
+            else:
+                # Если текст не ссылка — считаем, что пользователь ошибся
+                await message.answer(
+                    "Это не похоже на ссылку. Отправьте фото или нажмите «Пропустить»."
+                )
+                return
 
-    elif message.content_type == ContentType.PHOTO:
-        photo: PhotoSize = max(message.photo, key=lambda x: x.width * x.height)
-        photo_file = await message.bot.get_file(photo.file_id)
-        photo_bytes = await message.bot.download_file(photo_file.file_path)
+        elif message.content_type == ContentType.PHOTO:
+            photo: PhotoSize = max(message.photo, key=lambda x: x.width * x.height)
+            photo_file = await message.bot.get_file(photo.file_id)
+            photo_bytes = await message.bot.download_file(photo_file.file_path)
+            await state.update_data(image_data=photo_bytes.getvalue(), url=None)
 
-        await state.update_data(image_data=photo_bytes.getvalue())
+        # Переходим к следующему шагу только если данные корректны
+        await message.answer("Оставьте контактный номер телефона")
+        await state.set_state(ApplicationFormStates.phone)
 
-    await message.answer("Оставьте контактный номер телефона")
-    await state.set_state(ApplicationFormStates.phone)
+    except Exception as e:
+        logging.error(f"Error processing url/photo: {e}")
+        await message.answer(
+            "Произошла ошибка. Отправьте фото или ссылку, либо нажмите «Пропустить»."
+        )
+
     
-
 @router.message(ApplicationFormStates.phone)
 async def phone_handler(message: Message, state: FSMContext):
 
@@ -232,28 +262,6 @@ async def phone_handler(message: Message, state: FSMContext):
 
     data = await state.get_data()
 
-    # ВАЖНАЯ ПРОВЕРКА FSM
-    car_description = []
-    field_mapping = {
-        "marka": "Марка",
-        "model": "Модель",
-        "color": "Цвет",
-        "engine": "Двигатель",
-        "drive": "Привод",
-        "fuel": "Топливо",
-        "mileage": "Пробег",
-        "year": "Год",
-        "budget": "Бюджет",
-        "repairs": "Ремонт",
-        "url": "URL"
-    }
-
-    for field_key, field_name in field_mapping.items():
-        value = data.get(field_key, "не указано")
-        car_description.append(f"{field_name}: {value}")
-
-    car_description = "\n".join(car_description)
-
     async with async_session() as session:
 
         user_repo = UserRepository(session)
@@ -270,16 +278,16 @@ async def phone_handler(message: Message, state: FSMContext):
             await service.create_lead({
                 "user_id": user.id,
                 "phone": phone,
-                "marka": data.get["marka"],
-                "model": data.get["model"],
-                "color": data.get("color"),
-                "engine": data.get["engine"],
-                "drive": data.get["drive"],
-                "fuel": data.get["fuel"],
-                "mileage": data.get["mileage"],
-                "year": data.get["year"],
-                "budget": data.get["budget"],
-                "repairs": data.get["repairs"],
+                "marka": data.get("marka"),
+                "model": data.get("model"),
+                "color": data.get("color", "не указано"),
+                "engine": data.get("engine", "не указано"),
+                "drive": data.get("drive", "не указано"),
+                "fuel": data.get("fuel", "не указано"),
+                "mileage": data.get("mileage", "не указано"),
+                "year": data.get("year", "не указано"),
+                "budget": data.get("budget", "не указано"),
+                "repairs": data.get("repairs", "не указано"),
                 "url": data.get("url"),
                 "image_data": data.get("image_data")
             })
@@ -294,7 +302,7 @@ async def phone_handler(message: Message, state: FSMContext):
         await notify.send_new_lead(
             message.from_user.full_name,
             phone,
-            car_description
+            data
         )
     except Exception as e:
         logging.error(f"Notify error: {e}")
