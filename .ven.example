@@ -1,0 +1,18 @@
+NAME=Evgen
+USERNAME_BOT=GortautoBot
+BOT_TOKEN=Токен
+ADMIN_ID=5050871890
+
+
+
+POSTGRES_HOST=127.0.0.1
+POSTGRES_PORT=5432
+POSTGRES_USER=name
+POSTGRES_PASSWORD=password
+POSTGRES_DB=gortauto_bot_db
+
+# Для асинхронного подключения в SQLAlchemy 
+DATABASE_URL=postgresql+asyncpg://name:password@127.0.0.1:5432/gurtauto_bot_db
+
+# Для синхронного подключения в Alembic
+DATABASE_URL_SYNC=postgresql://name:password@127.0.0.1:5432/gurtauto_bot_db

@@ -6,6 +6,7 @@ authors = ["Pavel"]
 readme = "README.md"
 packages = [{ include = "*" }]
 
+
 [tool.poetry.dependencies]
 python = "^3.12"
 
