@@ -291,6 +291,7 @@ async def phone_handler(message: Message, state: FSMContext):
                 "url": data.get("url"),
                 "image_data": data.get("image_data")
             })
+            await session.commit()
         except Exception as e:
             logging.error(f"DB error: {e}", exc_info=True)
             await message.answer("❗ Ошибка сохранения заявки. Попробуйте позже.")
