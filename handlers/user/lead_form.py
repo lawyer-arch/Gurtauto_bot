@@ -202,7 +202,7 @@ async def handler_url(callback: CallbackQuery, state: FSMContext):
     
 
 """Ловит кнопку далее"""
-@router.callback_query(F.data == "further", ApplicationFormStates.url_or_image)
+@router.callback_query(F.data.startswith("further"), ApplicationFormStates.url_or_image)
 async def skip_url_or_image(callback: CallbackQuery, state: FSMContext):
     # Сохраняем None для обоих полей — пользователь ничего не прикрепил
     await state.update_data(url=None, image_data=None)
@@ -256,7 +256,7 @@ async def phone_handler(message: Message, state: FSMContext):
     phone = "+" + phone
 
     # Валидация
-    if not re.match(r"^(\+?\d{1,4})?\d{6,15}$", phone):
+    if not re.match(r"^\+7\d{10}$", phone):
         await message.answer("❗ Некорректный телефон. Введите ещё раз (пример: +79991234567)")
         return
 
