@@ -202,24 +202,35 @@ async def handler_url(callback: CallbackQuery, state: FSMContext):
     
 
 """Ловит кнопку далее"""
-@router.callback_query(F.data.startswith("further"), ApplicationFormStates.url_or_image)
+@router.callback_query(
+    F.data.startswith("further"),
+    ApplicationFormStates.url_or_image
+)
 async def skip_url_or_image(callback: CallbackQuery, state: FSMContext):
     # Сохраняем None для обоих полей — пользователь ничего не прикрепил
     await state.update_data(url=None, image_data=None)
+    # Переводим в следующее состояние
     await state.set_state(ApplicationFormStates.phone)
+    # Отправляем сообщение с запросом телефона
+    await callback.message.answer("Оставьте контактный номер телефона")
+    # Подтверждаем обработку callback
     await callback.answer()
 
 
 """Предлагаем оставить телефон"""
 @router.message(ApplicationFormStates.url_or_image,
               F.content_type.in_({ContentType.TEXT, ContentType.PHOTO}))
-async def hanler_url_or_image(message: Message, state: FSMContext):
+async def handler_url_or_image(message: Message, state: FSMContext):
     try:
         if message.content_type == ContentType.TEXT:
             text = message.text.strip()
             # Проверяем, является ли текст ссылкой
             if re.match(r'https?://\S+', text):
                 await state.update_data(url=text, image_data=None)
+                # Явно сообщаем о переходе к следующему шагу
+                await message.answer(
+                    "Ссылка сохранена. Оставьте контактный номер телефона"
+                )
             else:
                 # Если текст не ссылка — считаем, что пользователь ошибся
                 await message.answer(
@@ -232,9 +243,10 @@ async def hanler_url_or_image(message: Message, state: FSMContext):
             photo_file = await message.bot.get_file(photo.file_id)
             photo_bytes = await message.bot.download_file(photo_file.file_path)
             await state.update_data(image_data=photo_bytes.getvalue(), url=None)
+            # Явно сообщаем о переходе к следующему шагу
+            await message.answer("Фото сохранено. Оставьте контактный номер телефона")
 
         # Переходим к следующему шагу только если данные корректны
-        await message.answer("Оставьте контактный номер телефона")
         await state.set_state(ApplicationFormStates.phone)
 
     except Exception as e:
@@ -242,6 +254,7 @@ async def hanler_url_or_image(message: Message, state: FSMContext):
         await message.answer(
             "Произошла ошибка. Отправьте фото или ссылку, либо нажмите «Пропустить»."
         )
+
 
     
 @router.message(ApplicationFormStates.phone)
